@@ -5,7 +5,7 @@ export default class RoutesMe extends MgruberLazyComponent {
     return 'routes/me';
   }
 
-  onTemplateLoading() {
+  onLoading() {
     this.render(`<span>loading</span>`);
   }
 }
