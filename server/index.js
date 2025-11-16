@@ -32,6 +32,15 @@ function safeJoin(root, requestPath) {
   return joined;
 }
 
+// requests for these top-level dirs should return 404 if the file doesn't exist
+const SPECIAL_DIRS = new Set(['assets', 'dist', 'modules']);
+
+function isSpecialRequest(requestUrl) {
+  const clean = requestUrl.split('?')[0].split('#')[0];
+  const first = clean.replace(/^\/+/, '').split('/')[0] || '';
+  return SPECIAL_DIRS.has(first);
+}
+
 const server = http.createServer((req, res) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     res.writeHead(405, { 'Content-Type': 'text/plain' });
@@ -67,14 +76,27 @@ const server = http.createServer((req, res) => {
           if (req.method === 'GET') stream.pipe(res);
           else res.end();
         } else {
-          // fallback to SPA index
-          fs.createReadStream(INDEX_FILE).pipe(res);
+          // directory exists but no index.html
+          if (isSpecialRequest(req.url)) {
+            res.writeHead(404, { 'Content-Type': 'text/plain' });
+            return res.end('Not Found');
+          }
+          // fallback to SPA index for non-special directories
+          const stream = fs.createReadStream(INDEX_FILE);
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          if (req.method === 'GET') stream.pipe(res);
+          else res.end();
         }
       });
       return;
     }
 
-    // File not found -> SPA fallback: return index.html
+    // File not found -> decide between 404 (special dirs) or SPA fallback
+    if (isSpecialRequest(req.url)) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      return res.end('Not Found');
+    }
+
     fs.stat(INDEX_FILE, (iErr, iStats) => {
       if (iErr || !iStats.isFile()) {
         res.writeHead(500, { 'Content-Type': 'text/plain' });
