@@ -1,0 +1,17 @@
+{
+  "name": "cv",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "serve": "concurrently 'pnpm -C ./frontend run serve' 'node server/index.js' --names FRONTEND,SERVER -c red,yellow --prefix '{time} [{name}]' --timestampFormat 'HH:mm:ss.SSS'",
+    "format": "prettier --write ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "9.2.1",
+    "prettier": "3.6.2"
+  }
+}
