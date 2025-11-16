@@ -45,7 +45,7 @@ export abstract class MgruberLazyComponent extends HTMLElement {
 
   public onLoadingError(error: unknown): Promise<void> | void {
     console.error(error);
-    this.render('');
+    this.render('<mgruber-generic-error />');
   }
 
   async #initialize() {
@@ -96,7 +96,12 @@ export abstract class MgruberLazyComponent extends HTMLElement {
   }
 
   async #loadTemplate() {
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
     const response = await fetch(`/modules/${this.componentBasePath}/template.html`);
+    if (!response.ok) {
+      throw new Error(`Failed to load template (${response.status} ${response.statusText})`);
+    }
     const template = await response.text();
 
     this.#rawTemplate = template;

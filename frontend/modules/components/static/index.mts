@@ -1,5 +1,5 @@
 export async function registerStaticComponents() {
-  const staticComponents = ['mgruber-generic-error'];
+  const staticComponents = ['mgruber-route', 'mgruber-generic-error'];
 
   return Promise.all(staticComponents.map(loadComponent));
 }
