@@ -1,8 +1,10 @@
+import { VIEW_TRANSITION_ANIMATION_DURATION } from '../constants.mjs';
+
 const COMPONENTS_PREFIX = 'mgruber';
 
 const loadedComponents = new Set<string>();
 const loadedComponentTemplates = new Map<string, string>();
-const loadedComponentStyles = new Map<string, CSSStyleSheet>();
+const loadedComponentStyles = new Map<string, string>();
 
 export const registerLazyComponent = async (name: string, directoryPath: string) => {
   const webComponentName = `${COMPONENTS_PREFIX}-${name}`;
@@ -24,17 +26,23 @@ export const registerLazyComponent = async (name: string, directoryPath: string)
 };
 
 export abstract class MgruberLazyComponent extends HTMLElement {
+  #rawTemplate: string = '';
+  #rawLazyStyles: string = '';
+
   abstract get componentBasePath(): string;
 
-  wrapper = document.createElement('div');
+  get msLoadingStateShown() {
+    return VIEW_TRANSITION_ANIMATION_DURATION;
+  }
 
-  #rawTemplate: string = '';
-  #styles: CSSStyleSheet = new CSSStyleSheet();
+  // Styles which are loaded very early, even before the loading template is rendered.
+  // Loading styles can be put here.
+  get criticalStyles() {
+    return '';
+  }
 
   constructor() {
     super();
-
-    this.attachShadow({ mode: 'open' });
 
     this.#initialize();
   }
@@ -45,16 +53,25 @@ export abstract class MgruberLazyComponent extends HTMLElement {
 
   public onLoadingError(error: unknown): Promise<void> | void {
     console.error(error);
-    this.render('');
+    this.render('<mgruber-generic-error />');
+  }
+
+  render(html: string, styles: string | undefined = undefined) {
+    this.innerHTML = html;
+
+    if (styles) {
+      this.#injectStyles(styles);
+    }
   }
 
   async #initialize() {
     if (loadedComponentTemplates.has(this.componentBasePath)) {
+      this.#loadCriticalStyles();
       this.#rawTemplate = loadedComponentTemplates.get(this.componentBasePath) || '';
       this.#injectTemplate();
 
       if (loadedComponentStyles.has(this.componentBasePath)) {
-        this.#styles = loadedComponentStyles.get(this.componentBasePath) || this.#styles;
+        this.#rawLazyStyles = loadedComponentStyles.get(this.componentBasePath) || this.#rawLazyStyles;
 
         this.#injectStyles();
       } else {
@@ -62,7 +79,7 @@ export abstract class MgruberLazyComponent extends HTMLElement {
         try {
           await this.#loadStyles();
 
-          this.#styles = loadedComponentStyles.get(this.componentBasePath) || this.#styles;
+          this.#rawLazyStyles = loadedComponentStyles.get(this.componentBasePath) || this.#rawLazyStyles;
           this.#injectStyles();
         } catch (error) {
           this.onLoadingError(error);
@@ -76,7 +93,7 @@ export abstract class MgruberLazyComponent extends HTMLElement {
     const [loadTemplateError, loadStylesError] = await Promise.allSettled([
       this.#loadTemplate(),
       this.#loadStyles(),
-      this.onLoading(),
+      this.#setupLoadingState(),
     ]);
 
     if (loadTemplateError.status === 'rejected') {
@@ -96,7 +113,15 @@ export abstract class MgruberLazyComponent extends HTMLElement {
   }
 
   async #loadTemplate() {
+    if (this.msLoadingStateShown) {
+      await new Promise((resolve) => setTimeout(resolve, this.msLoadingStateShown));
+    }
+
     const response = await fetch(`/modules/${this.componentBasePath}/template.html`);
+    if (!response.ok) {
+      throw new Error(`Failed to load template (${response.status} ${response.statusText})`);
+    }
+
     const template = await response.text();
 
     this.#rawTemplate = template;
@@ -116,28 +141,32 @@ export abstract class MgruberLazyComponent extends HTMLElement {
     }
 
     const stylesAsText = response.status === 404 ? '' : await response.text();
+    this.#rawLazyStyles = stylesAsText;
 
-    const sheet = new CSSStyleSheet();
-    sheet.replaceSync(stylesAsText);
-    this.#styles = sheet;
-
-    loadedComponentStyles.set(this.componentBasePath, this.#styles);
+    loadedComponentStyles.set(this.componentBasePath, this.#rawLazyStyles);
   }
 
-  async #injectStyles() {
-    if (!this.shadowRoot) {
-      throw new Error('no shadow root present yet');
+  async #injectStyles(styles = this.#rawLazyStyles) {
+    if (styles === '') {
+      return;
     }
 
-    this.shadowRoot.adoptedStyleSheets = [this.#styles];
+    const style = document.createElement('style');
+    style.textContent = styles;
+
+    this.appendChild(style);
   }
 
-  render(html: string) {
-    if (!this.shadowRoot) {
-      throw new Error('no shadow root present yet');
-    }
+  #setupLoadingState() {
+    this.#loadCriticalStyles();
 
-    this.wrapper.innerHTML = html;
-    this.shadowRoot.appendChild(this.wrapper);
+    return this.onLoading();
+  }
+
+  #loadCriticalStyles() {
+    const criticalStyles = document.getElementById('route-critical-styles');
+    if (criticalStyles) {
+      criticalStyles.textContent = this.criticalStyles;
+    }
   }
 }

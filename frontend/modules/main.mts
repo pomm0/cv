@@ -83,12 +83,14 @@ async function loadRoute() {
   routeContentElement.innerHTML = `<${componentName}></${componentName}>`;
 }
 
-function handleLinkClicks(event: PointerEvent) {
+export function handleLinkClicks(event: PointerEvent) {
   if (!event.target) {
     return;
   }
 
-  const aTag = (event.target as Element).closest('a');
+  const target = event.target as Element;
+
+  const aTag = target.closest('a');
   if (!aTag) {
     return;
   }
@@ -107,7 +109,14 @@ function handleLinkClicks(event: PointerEvent) {
 
   history.pushState({}, '', href);
 
-  loadRoute();
+  // Fallback for browsers that don't support this API:
+  if (!document.startViewTransition) {
+    loadRoute();
+
+    return;
+  }
+
+  document.startViewTransition(() => loadRoute());
 }
 
 function loadRoutes() {
